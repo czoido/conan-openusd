@@ -13,6 +13,9 @@ graph_info.json
 /src/
 /fresh/
 
+# external_plugin_demo/run.sh build output
+/external_plugin_demo/build/
+
 # Python
 __pycache__/
 *.pyc

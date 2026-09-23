@@ -139,3 +139,21 @@ jobs:
         run: |
           python3 verify_requires.py "${{ steps.pkg.outputs.pkg_folder }}" \
             "recipes/openusd/all/components/${{ matrix.version }}.json"
+      - name: External plugin discovery demo
+        # run.sh is a plain Conan+CMake consumer of openusd (conanfile.txt +
+        # find_package), skipped on Windows for the same reason as the step
+        # above: it's POSIX-only (.so/.dylib + PXR_PLUGINPATH_NAME).
+        if: matrix.os != 'windows-latest'
+        run: |
+          EXTRA_OPTS=""
+          if [ "${{ matrix.options.mtlx }}" = "True" ]; then
+            EXTRA_OPTS="-o materialx/*:shared=True"
+          fi
+          # Same options/settings as the "conan create" step above, so this
+          # resolves the package it already built instead of triggering a
+          # second, redundant build under different options.
+          ./external_plugin_demo/run.sh \
+            -o openusd/*:with_openimageio="${{ matrix.options.oiio }}" \
+            -o openusd/*:with_materialx="${{ matrix.options.mtlx }}" \
+            -s compiler.cppstd="${{ matrix.options.cppstd }}" \
+            $EXTRA_OPTS

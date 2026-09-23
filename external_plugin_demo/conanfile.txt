@@ -1,0 +1,9 @@
+[requires]
+openusd/26.08
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[layout]
+cmake_layout

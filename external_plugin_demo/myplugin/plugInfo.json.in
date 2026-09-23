@@ -1,0 +1,18 @@
+{
+    "Plugins": [
+        {
+            "Info": {
+                "Types": {
+                    "MyExternalPlugin": {
+                        "bases": ["TfType"]
+                    }
+                }
+            },
+            "LibraryPath": "./libMyExternalPlugin@SHLIB_SUFFIX@",
+            "Name": "myExternalPlugin",
+            "ResourcePath": ".",
+            "Root": ".",
+            "Type": "library"
+        }
+    ]
+}
