@@ -1,0 +1,111 @@
+name: Verify openusd components
+
+on:
+  push:
+    paths:
+      - "recipes/openusd/**"
+      - "generate_components.py"
+      - "verify_requires.py"
+      - ".github/workflows/verify-components.yml"
+  pull_request:
+    paths:
+      - "recipes/openusd/**"
+      - "generate_components.py"
+      - "verify_requires.py"
+  workflow_dispatch: {}
+
+jobs:
+  compute-versions:
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.versions.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install pyyaml
+      - id: versions
+        run: |
+          python3 -c "
+          import json, yaml
+          data = yaml.safe_load(open('recipes/openusd/config.yml'))
+          print('versions=' + json.dumps(list(data['versions'].keys())))
+          " >> "$GITHUB_OUTPUT"
+
+  # Regenerates components/<version>.json from a fresh copy of the upstream
+  # source and diffs it against what's committed. Catches: someone hand-
+  # editing the JSON, forgetting to regenerate after a patch/version bump,
+  # or generate_components.py silently producing something different on a
+  # clean checkout than it did locally.
+  check-generated-json:
+    needs: compute-versions
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        version: ${{ fromJson(needs.compute-versions.outputs.versions) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download OpenUSD ${{ matrix.version }} source
+        run: |
+          curl -sL -o openusd.tar.gz \
+            "https://github.com/PixarAnimationStudios/OpenUSD/archive/refs/tags/v${{ matrix.version }}.tar.gz"
+          mkdir src && tar xzf openusd.tar.gz -C src --strip-components=1
+      - name: Regenerate and diff
+        run: |
+          python3 generate_components.py src "${{ matrix.version }}" fresh.json
+          diff -u "recipes/openusd/all/components/${{ matrix.version }}.json" fresh.json && \
+            echo "components/${{ matrix.version }}.json is up to date with upstream source"
+
+  # Real build + link-level verification: builds the package for a spread of
+  # platforms and option combinations, then asks the linker (not the parser)
+  # whether every component's declared `requires` actually covers what it
+  # links against, directly or transitively.
+  build-and-verify:
+    needs: compute-versions
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJson(needs.compute-versions.outputs.versions) }}
+        os: [ubuntu-latest, macos-latest]
+        # A matrix dimension whose values are objects still cross-multiplies
+        # normally with the other dimensions (unlike `include`, which would
+        # add these as separate one-off combinations instead of version x os
+        # x options).
+        options:
+          - { name: default, oiio: "False", mtlx: "False" }
+          - { name: full, oiio: "True", mtlx: "True" }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install "conan>=2.1,<3"
+      - run: conan profile detect
+      - name: Cache Conan packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2/p
+          key: conan-${{ matrix.os }}-${{ matrix.options.name }}-${{ hashFiles('recipes/openusd/all/conandata.yml') }}
+      - name: conan create
+        id: create
+        run: |
+          EXTRA_OPTS=""
+          if [ "${{ matrix.options.mtlx }}" = "True" ]; then
+            EXTRA_OPTS="-o materialx/*:shared=True"
+          fi
+          conan create recipes/openusd/all --version="${{ matrix.version }}" \
+            -o openusd/*:with_openimageio="${{ matrix.options.oiio }}" \
+            -o openusd/*:with_materialx="${{ matrix.options.mtlx }}" \
+            $EXTRA_OPTS \
+            --build=missing \
+            --format=json > create_output.json
+      - name: Locate built package
+        id: pkg
+        run: |
+          RREF=$(python3 -c "import json; d=json.load(open('create_output.json')); n=next(n for n in d['graph']['nodes'].values() if n.get('name')=='openusd'); print(n['ref'])")
+          PKGID=$(python3 -c "import json; d=json.load(open('create_output.json')); n=next(n for n in d['graph']['nodes'].values() if n.get('name')=='openusd'); print(n['package_id'])")
+          PKG_FOLDER=$(conan cache path "${RREF}:${PKGID}")
+          echo "pkg_folder=$PKG_FOLDER" >> "$GITHUB_OUTPUT"
+      - name: Verify requires against real linkage
+        run: |
+          python3 verify_requires.py "${{ steps.pkg.outputs.pkg_folder }}" \
+            "recipes/openusd/all/components/${{ matrix.version }}.json"

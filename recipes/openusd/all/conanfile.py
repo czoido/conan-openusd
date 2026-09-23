@@ -1,0 +1,180 @@
+import json
+import os
+
+from conan import ConanFile
+from conan.errors import ConanInvalidConfiguration
+from conan.tools.apple import is_apple_os
+from conan.tools.build import check_min_cppstd
+from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
+from conan.tools.files import copy, get, load, rm, rmdir, apply_conandata_patches, export_conandata_patches
+
+#mirror
+required_conan_version = ">=2.1"
+
+class OpenUSDConan(ConanFile):
+    name = "openusd"
+    description = "Universal Scene Description"
+    license = "DocumentRef-LICENSE.txt:LicenseRef-Modified-Apache-2.0-License"
+    url = "https://github.com/conan-io/conan-center-index"
+    homepage = "https://openusd.org/"
+    topics = ("3d", "scene", "usd")
+    package_type = "shared-library"
+    settings = "os", "arch", "compiler", "build_type"
+    options = {
+        "with_openimageio": [True, False],
+        "with_materialx": [True, False],
+    }
+    default_options = {
+        "with_openimageio": False,
+        "with_materialx": False
+    }
+    exports = "components/*.json"
+
+    def export_sources(self):
+        export_conandata_patches(self)
+
+    def layout(self):
+        cmake_layout(self, src_folder="src")
+
+    def requirements(self):
+        self.requires("onetbb/2023.1.0", transitive_headers=True)
+        self.requires("opensubdiv/3.7.0")
+        self.requires("opengl/system")
+        if self.options.with_openimageio:
+            self.requires("openimageio/2.5.19.1")
+        if self.options.with_materialx:
+            self.requires("materialx/1.39.4")
+
+    def build_requirements(self):
+        self.tool_requires("cmake/[>=3.27 <4]")
+
+    def validate(self):
+        check_min_cppstd(self, 17)
+        if not self.dependencies["opensubdiv"].options.with_opengl:
+            raise ConanInvalidConfiguration('openusd requires -o "opensubdiv/*:with_opengl=True"')
+        if self.options.with_materialx and not self.dependencies["materialx"].options.shared:
+            raise ConanInvalidConfiguration('openusd requires -o "materialx/*:shared=True"')
+
+    def source(self):
+        get(self, **self.conan_data["sources"][self.version], strip_root=True)
+        apply_conandata_patches(self)
+
+    def generate(self):
+        tc = CMakeToolchain(self)
+        tc.cache_variables["PXR_BUILD_USDVIEW"] = False
+        tc.cache_variables["PXR_BUILD_TESTS"] = False
+        tc.cache_variables["PXR_BUILD_EXAMPLES"] = False
+        tc.cache_variables["PXR_BUILD_TUTORIALS"] = False
+        tc.cache_variables["PXR_BUILD_HTML_DOCUMENTATION"] = False
+        tc.cache_variables["PXR_ENABLE_PYTHON_SUPPORT"] = False
+        tc.cache_variables["PXR_USE_DEBUG_PYTHON"] = False
+        tc.cache_variables["PXR_BUILD_USD_TOOLS"] = False
+        tc.cache_variables["PXR_BUILD_OPENIMAGEIO_PLUGIN"] = self.options.with_openimageio
+        tc.cache_variables["PXR_ENABLE_MATERIALX_SUPPORT"] = self.options.with_materialx
+        tc.cache_variables["TBB_tbb_LIBRARY"] = "TBB::tbb"
+        tc.cache_variables["OIIO_LIBRARIES"] = "OpenImageIO::OpenImageIO" if self.options.with_openimageio else ""
+        tc.generate()
+
+        deps = CMakeDeps(self)
+        subdiv_suffix = "" if self.dependencies["opensubdiv"].options.shared else "_static"
+        deps.set_property("opensubdiv::osdcpu", "cmake_target_name", f"OpenSubdiv::osdCPU{subdiv_suffix}")
+        deps.set_property("opensubdiv::osdgpu", "cmake_target_name", f"OpenSubdiv::osdGPU{subdiv_suffix}")
+
+        # Remove materialx namespace
+        materialx_targets = [
+            "MaterialXCore",
+            "MaterialXFormat",
+            "MaterialXGenGlsl",
+            "MaterialXGenOsl",
+            "MaterialXGenMsl",
+            "MaterialXGenShader",
+            "MaterialXRender",
+            "MaterialXRenderGlsl",
+        ]
+        for target in materialx_targets:
+            deps.set_property(f"materialx::{target}", "cmake_target_name", target)
+        deps.generate()
+
+    def build(self):
+        cmake = CMake(self)
+        cmake.configure()
+        cmake.build()
+
+    def package(self):
+        copy(self, "LICENSE.txt", self.source_folder, os.path.join(self.package_folder, "licenses"))
+        cmake = CMake(self)
+        cmake.install()
+
+        rm(self, "pxrConfig.cmake", self.package_folder)
+        rmdir(self, os.path.join(self.package_folder, "cmake"))
+
+    @property
+    def _components_file(self):
+        return os.path.join(self.recipe_folder, "components", f"{self.version}.json")
+
+    @property
+    def _components_info(self):
+        # extracted from upstream's own CMakeLists.txt files
+        if not os.path.isfile(self._components_file):
+            raise ConanInvalidConfiguration(
+                f"Missing {self._components_file}. Run "
+                f"'python generate_components.py <openusd-{self.version}-source-dir> "
+                f"{self.version} {self._components_file}' against the upstream source for "
+                "this version and commit the result."
+            )
+        return json.loads(load(self, self._components_file))
+
+    def _condition_is_true(self, condition):
+        symbols = {
+            "is_apple": is_apple_os(self),
+            "with_openimageio": bool(self.options.with_openimageio),
+            "with_materialx": bool(self.options.with_materialx),
+        }
+        for name in condition:
+            negated = name.startswith("not_")
+            value = symbols[name[4:] if negated else name]
+            if negated:
+                value = not value
+            if not value:
+                return False
+        return True
+
+    def package_info(self):
+        is_apple = is_apple_os(self)
+        kit_framework = "AppKit" if self.settings.os == "Macos" else "UIKit"
+        plugin_dir = os.path.join("plugin", "usd")
+
+        def plugin_libs(name):
+            # No import library on Windows, and no "lib" prefix elsewhere, so the full
+            # file name is needed.
+            if self.settings.os == "Windows":
+                return []
+            return [f"{name}{'.dylib' if is_apple else '.so'}"]
+
+        for comp_name, comp_info in self._components_info.items():
+            if not self._condition_is_true(comp_info.get("condition", [])):
+                continue
+
+            requires = list(comp_info.get("requires", []))
+            frameworks = list(comp_info.get("frameworks", []))
+            for extra in comp_info.get("conditional", []):
+                if self._condition_is_true(extra["condition"]):
+                    requires.extend(extra.get("requires", []))
+                    frameworks.extend(extra.get("frameworks", []))
+            frameworks = [kit_framework if f == "$kit_framework" else f for f in frameworks]
+
+            is_plugin = comp_info.get("is_plugin", False)
+            component = self.cpp_info.components[comp_name]
+            component.libs = plugin_libs(comp_name) if is_plugin else [f"usd_{comp_name}"]
+            component.requires = requires
+            if is_apple:
+                component.frameworks = frameworks
+            if is_plugin:
+                component.libdirs = [plugin_dir]
+                component.bindirs = [plugin_dir]
+            elif self.settings.os == "Windows":
+                component.bindirs = ["lib"]
+            if is_plugin:
+                component.system_libs = []
+            elif self.settings.os in ["Linux", "FreeBSD"]:
+                component.system_libs = ["m", "pthread", "dl"]
