@@ -71,8 +71,10 @@ jobs:
         # add these as separate one-off combinations instead of version x os
         # x options).
         options:
-          - { name: default, oiio: "False", mtlx: "False" }
-          - { name: full, oiio: "True", mtlx: "True" }
+          - { name: default, oiio: "False", mtlx: "False", cppstd: "17" }
+          # libheif (pulled in transitively by openimageio) requires C++20;
+          # the default profile's detected cppstd (gnu17) isn't enough.
+          - { name: full, oiio: "True", mtlx: "True", cppstd: "20" }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -96,6 +98,7 @@ jobs:
           conan create recipes/openusd/all --version="${{ matrix.version }}" \
             -o openusd/*:with_openimageio="${{ matrix.options.oiio }}" \
             -o openusd/*:with_materialx="${{ matrix.options.mtlx }}" \
+            -s compiler.cppstd="${{ matrix.options.cppstd }}" \
             $EXTRA_OPTS \
             -c tools.system.package_manager:mode=install \
             -c tools.system.package_manager:sudo=True \
