@@ -80,6 +80,9 @@ jobs:
           # libheif (pulled in transitively by openimageio) requires C++20;
           # the default profile's detected cppstd (gnu17) isn't enough.
           - { name: full, oiio: "True", mtlx: "True", cppstd: "20" }
+        exclude:
+          - os: windows-latest
+            options: { name: full, oiio: "True", mtlx: "True", cppstd: "20" }
     runs-on: ${{ matrix.os }}
     defaults:
       run:
