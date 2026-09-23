@@ -65,7 +65,12 @@ jobs:
       fail-fast: false
       matrix:
         version: ${{ fromJson(needs.compute-versions.outputs.versions) }}
-        os: [ubuntu-latest, macos-latest]
+        # windows-latest builds the package but skips the link-level
+        # verification step: verify_requires.py only knows how to inspect
+        # ELF (readelf) and Mach-O (otool) binaries, not PE/.dll, so there's
+        # no ground-truth check there yet, only a build/test_package smoke
+        # test.
+        os: [ubuntu-latest, macos-latest, windows-latest]
         # A matrix dimension whose values are objects still cross-multiplies
         # normally with the other dimensions (unlike `include`, which would
         # add these as separate one-off combinations instead of version x os
@@ -76,6 +81,12 @@ jobs:
           # the default profile's detected cppstd (gnu17) isn't enough.
           - { name: full, oiio: "True", mtlx: "True", cppstd: "20" }
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        # windows-latest defaults `run:` steps to PowerShell, which doesn't
+        # understand the bash syntax used below; Git Bash ships on the
+        # windows-latest image.
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -106,12 +117,14 @@ jobs:
             --format=json > create_output.json
       - name: Locate built package
         id: pkg
+        if: matrix.os != 'windows-latest'
         run: |
           RREF=$(python3 -c "import json; d=json.load(open('create_output.json')); n=next(n for n in d['graph']['nodes'].values() if n.get('name')=='openusd'); print(n['ref'])")
           PKGID=$(python3 -c "import json; d=json.load(open('create_output.json')); n=next(n for n in d['graph']['nodes'].values() if n.get('name')=='openusd'); print(n['package_id'])")
           PKG_FOLDER=$(conan cache path "${RREF}:${PKGID}")
           echo "pkg_folder=$PKG_FOLDER" >> "$GITHUB_OUTPUT"
       - name: Verify requires against real linkage
+        if: matrix.os != 'windows-latest'
         run: |
           python3 verify_requires.py "${{ steps.pkg.outputs.pkg_folder }}" \
             "recipes/openusd/all/components/${{ matrix.version }}.json"
