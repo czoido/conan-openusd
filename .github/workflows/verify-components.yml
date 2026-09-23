@@ -106,11 +106,22 @@ jobs:
           if [ "${{ matrix.options.mtlx }}" = "True" ]; then
             EXTRA_OPTS="-o materialx/*:shared=True"
           fi
+          GEN_OPTS=""
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            # Force Ninja instead of letting CMakeToolchain guess a
+            # "Visual Studio N YYYY" generator name from compiler.version:
+            # that guess is brittle against whatever VS release
+            # windows-latest happens to ship (see the "Could not create
+            # named generator" failures this caused). Upstream's own
+            # Windows CI builds with Ninja for the same reason.
+            GEN_OPTS="-c tools.cmake.cmaketoolchain:generator=Ninja"
+          fi
           conan create recipes/openusd/all --version="${{ matrix.version }}" \
             -o openusd/*:with_openimageio="${{ matrix.options.oiio }}" \
             -o openusd/*:with_materialx="${{ matrix.options.mtlx }}" \
             -s compiler.cppstd="${{ matrix.options.cppstd }}" \
             $EXTRA_OPTS \
+            $GEN_OPTS \
             -c tools.system.package_manager:mode=install \
             -c tools.system.package_manager:sudo=True \
             --build=missing \
