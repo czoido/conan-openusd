@@ -1,1 +1,21 @@
 sync_to_conan_center_index.sh
+
+# Conan
+**/test_package/build/
+**/test_package/build-*/
+CMakeUserPresets.json
+conan.lock
+conanbuildinfo.*
+conaninfo.txt
+graph_info.json
+
+# Scratch dirs used when regenerating components/<version>.json (see README.md)
+/src/
+/fresh/
+
+# Python
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
