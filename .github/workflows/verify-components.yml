@@ -50,8 +50,9 @@ jobs:
           mkdir src && tar xzf openusd.tar.gz -C src --strip-components=1
       - name: Regenerate and diff
         run: |
-          python3 generate_components.py src "${{ matrix.version }}" fresh.json
-          diff -u "recipes/openusd/all/components/${{ matrix.version }}.json" fresh.json && \
+          mkdir -p fresh
+          python3 generate_components.py src "${{ matrix.version }}" "fresh/${{ matrix.version }}.json"
+          diff -u "recipes/openusd/all/components/${{ matrix.version }}.json" "fresh/${{ matrix.version }}.json" && \
             echo "components/${{ matrix.version }}.json is up to date with upstream source"
 
   # Real build + link-level verification: builds the package for a spread of
@@ -96,6 +97,8 @@ jobs:
             -o openusd/*:with_openimageio="${{ matrix.options.oiio }}" \
             -o openusd/*:with_materialx="${{ matrix.options.mtlx }}" \
             $EXTRA_OPTS \
+            -c tools.system.package_manager:mode=install \
+            -c tools.system.package_manager:sudo=True \
             --build=missing \
             --format=json > create_output.json
       - name: Locate built package
