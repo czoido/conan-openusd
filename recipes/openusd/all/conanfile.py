@@ -2,7 +2,7 @@ import json
 import os
 
 from conan import ConanFile
-from conan.errors import ConanInvalidConfiguration
+from conan.errors import ConanException, ConanInvalidConfiguration
 from conan.tools.apple import is_apple_os
 from conan.tools.build import check_min_cppstd
 from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
@@ -116,12 +116,7 @@ class OpenUSDConan(ConanFile):
     def _components_info(self):
         # extracted from upstream's own CMakeLists.txt files
         if not os.path.isfile(self._components_file):
-            raise ConanInvalidConfiguration(
-                f"Missing {self._components_file}. Run "
-                f"'python generate_components.py <openusd-{self.version}-source-dir> "
-                f"{self.version} {self._components_file}' against the upstream source for "
-                "this version and commit the result."
-            )
+            raise ConanException(f"Missing component definitions for version {self.version}.")
         return json.loads(load(self, self._components_file))
 
     def _condition_is_true(self, condition):
