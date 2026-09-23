@@ -139,13 +139,6 @@ class OpenUSDConan(ConanFile):
         kit_framework = "AppKit" if self.settings.os == "Macos" else "UIKit"
         plugin_dir = os.path.join("plugin", "usd")
 
-        def plugin_libs(name):
-            # No import library on Windows, and no "lib" prefix elsewhere, so the full
-            # file name is needed.
-            if self.settings.os == "Windows":
-                return []
-            return [f"{name}{'.dylib' if is_apple else '.so'}"]
-
         for comp_name, comp_info in self._components_info.items():
             if not self._condition_is_true(comp_info.get("condition", [])):
                 continue
@@ -160,16 +153,18 @@ class OpenUSDConan(ConanFile):
 
             is_plugin = comp_info.get("is_plugin", False)
             component = self.cpp_info.components[comp_name]
-            component.libs = plugin_libs(comp_name) if is_plugin else [f"usd_{comp_name}"]
             component.requires = requires
             if is_apple:
                 component.frameworks = frameworks
             if is_plugin:
+                # Loaded dynamically at runtime through USD's Plug registry
+                # (plugInfo.json), never linked directly: no .libs, just the
+                # location so it's still discoverable/dlopen-able.
                 component.libdirs = [plugin_dir]
                 component.bindirs = [plugin_dir]
-            elif self.settings.os == "Windows":
-                component.bindirs = ["lib"]
-            if is_plugin:
-                component.system_libs = []
-            elif self.settings.os in ["Linux", "FreeBSD"]:
-                component.system_libs = ["m", "pthread", "dl"]
+            else:
+                component.libs = [f"usd_{comp_name}"]
+                if self.settings.os == "Windows":
+                    component.bindirs = ["lib"]
+                if self.settings.os in ["Linux", "FreeBSD"]:
+                    component.system_libs = ["m", "pthread", "dl"]
