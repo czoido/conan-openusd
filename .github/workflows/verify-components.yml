@@ -78,12 +78,10 @@ jobs:
         options:
           - { name: default, imaging: "True", oiio: "False", mtlx: "False", cppstd: "17" }
           - { name: core, imaging: "False", oiio: "False", mtlx: "False", cppstd: "17" }
-          # libheif (pulled in transitively by openimageio) requires C++20;
-          # the default profile's detected cppstd (gnu17) isn't enough.
-          - { name: full, imaging: "True", oiio: "True", mtlx: "True", cppstd: "20" }
+          - { name: full, imaging: "True", oiio: "True", mtlx: "True", cppstd: "17" }
         exclude:
           - os: windows-latest
-            options: { name: full, imaging: "True", oiio: "True", mtlx: "True", cppstd: "20" }
+            options: { name: full, imaging: "True", oiio: "True", mtlx: "True", cppstd: "17" }
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -121,6 +119,7 @@ jobs:
             -o openusd/*:with_openimageio="${{ matrix.options.oiio }}" \
             -o openusd/*:with_materialx="${{ matrix.options.mtlx }}" \
             -s compiler.cppstd="${{ matrix.options.cppstd }}" \
+            -s "libheif/*:compiler.cppstd=20" \
             $GEN_OPTS \
             -c tools.system.package_manager:mode=install \
             -c tools.system.package_manager:sudo=True \
@@ -152,4 +151,5 @@ jobs:
             -o openusd/*:with_imaging="${{ matrix.options.imaging }}" \
             -o openusd/*:with_openimageio="${{ matrix.options.oiio }}" \
             -o openusd/*:with_materialx="${{ matrix.options.mtlx }}" \
-            -s compiler.cppstd="${{ matrix.options.cppstd }}"
+            -s compiler.cppstd="${{ matrix.options.cppstd }}" \
+            -s "libheif/*:compiler.cppstd=20"
