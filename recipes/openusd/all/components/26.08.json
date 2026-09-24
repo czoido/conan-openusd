@@ -128,12 +128,7 @@
     },
     "hioImageIO": {
         "condition": ["is_apple", "with_imaging"],
-        "conditional": [
-            {
-                "condition": ["is_apple"],
-                "frameworks": ["Foundation", "CoreGraphics", "ImageIO"]
-            }
-        ],
+        "frameworks": ["Foundation", "CoreGraphics", "ImageIO"],
         "is_plugin": true,
         "requires": ["ar", "arch", "gf", "hio", "tf"]
     },

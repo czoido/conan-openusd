@@ -2,19 +2,18 @@ import json
 import os
 
 from conan import ConanFile
-from conan.errors import ConanException, ConanInvalidConfiguration
+from conan.errors import ConanInvalidConfiguration
 from conan.tools.apple import is_apple_os
 from conan.tools.build import check_min_cppstd
 from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
-from conan.tools.files import copy, get, load, rm, rmdir, apply_conandata_patches, export_conandata_patches
+from conan.tools.files import copy, get, load, replace_in_file, rm, rmdir, apply_conandata_patches, export_conandata_patches
 
-#mirror
 required_conan_version = ">=2.1"
 
 class OpenUSDConan(ConanFile):
     name = "openusd"
     description = "Universal Scene Description"
-    license = "DocumentRef-LICENSE.txt:LicenseRef-Modified-Apache-2.0-License"
+    license = "LicenseRef-TOST-1.0"
     url = "https://github.com/conan-io/conan-center-index"
     homepage = "https://openusd.org/"
     topics = ("3d", "scene", "usd")
@@ -36,9 +35,7 @@ class OpenUSDConan(ConanFile):
         export_conandata_patches(self)
 
     def configure(self):
-        if self.options.with_imaging:
-            self.options["opensubdiv"].with_opengl = True
-        else:
+        if not self.options.with_imaging:
             self.options.rm_safe("with_openimageio")
         if self.options.with_materialx:
             self.options["materialx"].shared = True
@@ -69,6 +66,8 @@ class OpenUSDConan(ConanFile):
     def source(self):
         get(self, **self.conan_data["sources"][self.version], strip_root=True)
         apply_conandata_patches(self)
+        replace_in_file(self, os.path.join(self.source_folder, "cmake", "defaults", "CXXDefaults.cmake"),
+                        "set(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)\nset(CMAKE_CXX_EXTENSIONS OFF)\n", "")
 
     def generate(self):
         tc = CMakeToolchain(self)
@@ -83,7 +82,6 @@ class OpenUSDConan(ConanFile):
         tc.cache_variables["PXR_BUILD_USD_IMAGING"] = self.options.with_imaging
         tc.cache_variables["PXR_BUILD_OPENIMAGEIO_PLUGIN"] = bool(self.options.get_safe("with_openimageio"))
         tc.cache_variables["PXR_ENABLE_MATERIALX_SUPPORT"] = self.options.with_materialx
-        tc.cache_variables["TBB_tbb_LIBRARY"] = "TBB::tbb"
         if self.options.get_safe("with_openimageio"):
             tc.cache_variables["OIIO_LIBRARIES"] = "OpenImageIO::OpenImageIO"
         tc.generate()
@@ -116,6 +114,7 @@ class OpenUSDConan(ConanFile):
 
     def package(self):
         copy(self, "LICENSE.txt", self.source_folder, os.path.join(self.package_folder, "licenses"))
+        copy(self, "NOTICE.txt", self.source_folder, os.path.join(self.package_folder, "licenses"))
         cmake = CMake(self)
         cmake.install()
 
@@ -129,8 +128,6 @@ class OpenUSDConan(ConanFile):
     @property
     def _components_info(self):
         # extracted from upstream's own CMakeLists.txt files
-        if not os.path.isfile(self._components_file):
-            raise ConanException(f"Missing component definitions for version {self.version}.")
         return json.loads(load(self, self._components_file))
 
     def _condition_is_true(self, condition):

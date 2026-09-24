@@ -770,7 +770,7 @@ def resolve_tokens(tokens, condition, fvars, internal_names, out):
             )
 
 
-def build_component(parsed, internal_names):
+def build_component(parsed, internal_names, comp_cond=()):
     resolved = []
     resolve_tokens(parsed["libraries_raw"], True, parsed["fvars"], internal_names, resolved)
 
@@ -780,6 +780,9 @@ def build_component(parsed, internal_names):
         ck = condition_key(cond)
         if ck is False:
             continue
+        if ck is not True:
+            # symbols already required by the component itself are redundant here
+            ck = [name for name in ck if name not in comp_cond] or True
         reqs = contrib.get("requires", [])
         frms = contrib.get("frameworks", [])
         if ck is True:
@@ -876,7 +879,7 @@ def main():
         if ck is False:
             skipped.append(parsed["name"])
             continue
-        comp = build_component(parsed, internal_names)
+        comp = build_component(parsed, internal_names, ck if ck is not True else ())
         if ck is not True:
             comp["condition"] = list(ck)
         components[parsed["name"]] = comp
