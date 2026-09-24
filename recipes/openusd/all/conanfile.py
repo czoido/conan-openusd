@@ -61,7 +61,6 @@ class OpenUSDConan(ConanFile):
             raise ConanInvalidConfiguration('openusd requires -o "materialx/*:shared=True"')
 
     def validate_build(self):
-        # upstream sources don't compile as C++20, consumers can still use a C++17 binary
         check_max_cppstd(self, 17)
 
     def source(self):
