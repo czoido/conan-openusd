@@ -18,7 +18,6 @@ class OpenUSDConan(ConanFile):
     url = "https://github.com/conan-io/conan-center-index"
     homepage = "https://openusd.org/"
     topics = ("3d", "scene", "usd")
-    # Plug registry locates plugins relative to the shared libs
     package_type = "shared-library"
     settings = "os", "arch", "compiler", "build_type"
     options = {
