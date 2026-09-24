@@ -45,11 +45,9 @@ FIXED_VARS = {
     "PXR_BUILD_TUTORIALS": False,
     "PXR_BUILD_HTML_DOCUMENTATION": False,
     "PXR_ENABLE_PYTHON_SUPPORT": False,
-    "PXR_USE_DEBUG_PYTHON": False,
     "PXR_BUILD_USD_TOOLS": False,
     # upstream defaults the recipe does not touch
-    "PXR_BUILD_IMAGING": True,
-    "PXR_BUILD_USD_IMAGING": True,
+    "PXR_USE_DEBUG_PYTHON": False,
     "PXR_BUILD_EXEC": True,
     "PXR_BUILD_USD_VALIDATION": True,
     "PXR_ENABLE_GL_SUPPORT": True,
@@ -74,6 +72,9 @@ SYMBOLIC_VARS = {
     "PXR_ENABLE_METAL_SUPPORT": "is_apple",
     "PXR_BUILD_OPENIMAGEIO_PLUGIN": "with_openimageio",
     "PXR_ENABLE_MATERIALX_SUPPORT": "with_materialx",
+    # both driven by the same recipe option
+    "PXR_BUILD_IMAGING": "with_imaging",
+    "PXR_BUILD_USD_IMAGING": "with_imaging",
     "APPLE": "is_apple",
 }
 
@@ -139,9 +140,10 @@ def _clean_var(tok):
 # A symbolic condition is a frozenset of (name, negated) literal pairs,
 # meaning the AND of `NOT name` (negated=True) or `name` (negated=False)
 # across all entries. `name` is either a real Conan-facing symbol
-# (is_apple/with_openimageio/with_materialx) or an "__unknown__::<text>"
+# (is_apple/with_imaging/with_openimageio/with_materialx) or an "__unknown__::<text>"
 # opaque marker for anything this evaluator can't otherwise resolve.
-# condition_key() raises if an opaque marker survives into real output.
+# condition_key() raises if an opaque marker or a negated literal survives
+# into real output.
 
 def _lookup_var(name):
     name = name.strip()
@@ -292,7 +294,16 @@ def condition_key(cond):
             f"condition depends on unresolvable term(s) {unknown} that reached real "
             "output; teach eval_condition/_lookup_var about it or check EXTERNAL_TOKEN_MAP"
         )
-    return sorted(name if not negated else f"not_{name}" for name, negated in cond)
+    negated = [name for name, negated in cond if negated]
+    if negated:
+        # package_info() does not support negations yet
+        raise Unresolvable(
+            f"condition depends on negated term(s) {negated} (e.g. `if (NOT APPLE)`) "
+            "that reached real output; review this case manually and add support "
+            "for negated conditions to both this script and the recipe's "
+            "_condition_is_true() if it is legitimate"
+        )
+    return sorted(name for name, _negated in cond)
 
 
 # ---------------------------------------------------------------------------

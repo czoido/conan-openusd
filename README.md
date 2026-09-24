@@ -35,7 +35,7 @@ fails immediately and loudly instead of silently reusing stale data.
 
 The script aborts (rather than guessing) whenever it hits CMake it can't
 mechanically classify: an unrecognized `LIBRARIES` token, a boolean condition it
-can't reduce to a simple AND of `is_apple` / `with_openimageio` /
+can't reduce to a simple AND of `is_apple` / `with_imaging` / `with_openimageio` /
 `with_materialx`, and so on. Read the error, and either extend
 `EXTERNAL_TOKEN_MAP` / `FIXED_VARS` in the script (for a new upstream option or
 external dependency) or investigate further before assuming the output is
@@ -52,7 +52,7 @@ or transitively) from what the JSON declares. Catches a missing `requires` that
 not just parsed source.
 
 ```
-conan create recipes/openusd/all --version=X.Y -o openusd/*:with_openimageio=True -o openusd/*:with_materialx=True -o materialx/*:shared=True --build=missing
+conan create recipes/openusd/all --version=X.Y -o openusd/*:with_openimageio=True -o openusd/*:with_materialx=True --build=missing
 conan list "openusd/X.Y:*"                       # get the package's rrev:pkgid
 conan cache path "openusd/X.Y#<rrev>:<pkgid>"    # get its package folder
 
@@ -60,7 +60,7 @@ python3 verify_requires.py <package_folder> recipes/openusd/all/components/X.Y.j
 ```
 
 Run it once per option combination that changes which components get built (at
-minimum: default options, and `with_openimageio=True with_materialx=True`
+minimum: default options, `with_imaging=False`, and `with_openimageio=True with_materialx=True`
 together). A "MISSING requires" line is a real bug in the JSON; ignore anything
 that turns out to be a build-system library (e.g. an OS framework pulled in
 transitively by a third-party dependency), not one of USD's own components.

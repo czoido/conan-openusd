@@ -21,6 +21,7 @@ int main() {
 
   stage->GetRootLayer()->Save();
 
+#ifdef OPENUSD_WITH_IMAGING
   // hioOpenEXR is never linked by this executable: it's a runtime plugin
   // discovered through USD's Plug registry (plugInfo.json). Finding and
   // loading it here proves that discovery actually works from an installed
@@ -34,6 +35,7 @@ int main() {
     std::cerr << "Failed to load the hioOpenEXR plugin" << std::endl;
     return EXIT_FAILURE;
   }
+#endif
 
   return EXIT_SUCCESS;
 }

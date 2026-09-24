@@ -76,13 +76,14 @@ jobs:
         # add these as separate one-off combinations instead of version x os
         # x options).
         options:
-          - { name: default, oiio: "False", mtlx: "False", cppstd: "17" }
+          - { name: default, imaging: "True", oiio: "False", mtlx: "False", cppstd: "17" }
+          - { name: core, imaging: "False", oiio: "False", mtlx: "False", cppstd: "17" }
           # libheif (pulled in transitively by openimageio) requires C++20;
           # the default profile's detected cppstd (gnu17) isn't enough.
-          - { name: full, oiio: "True", mtlx: "True", cppstd: "20" }
+          - { name: full, imaging: "True", oiio: "True", mtlx: "True", cppstd: "20" }
         exclude:
           - os: windows-latest
-            options: { name: full, oiio: "True", mtlx: "True", cppstd: "20" }
+            options: { name: full, imaging: "True", oiio: "True", mtlx: "True", cppstd: "20" }
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -105,10 +106,6 @@ jobs:
       - name: conan create
         id: create
         run: |
-          EXTRA_OPTS=""
-          if [ "${{ matrix.options.mtlx }}" = "True" ]; then
-            EXTRA_OPTS="-o materialx/*:shared=True"
-          fi
           GEN_OPTS=""
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             # Force Ninja instead of letting CMakeToolchain guess a
@@ -120,10 +117,10 @@ jobs:
             GEN_OPTS="-c tools.cmake.cmaketoolchain:generator=Ninja"
           fi
           conan create recipes/openusd/all --version="${{ matrix.version }}" \
+            -o openusd/*:with_imaging="${{ matrix.options.imaging }}" \
             -o openusd/*:with_openimageio="${{ matrix.options.oiio }}" \
             -o openusd/*:with_materialx="${{ matrix.options.mtlx }}" \
             -s compiler.cppstd="${{ matrix.options.cppstd }}" \
-            $EXTRA_OPTS \
             $GEN_OPTS \
             -c tools.system.package_manager:mode=install \
             -c tools.system.package_manager:sudo=True \
@@ -148,15 +145,11 @@ jobs:
         # above: it's POSIX-only (.so/.dylib + PXR_PLUGINPATH_NAME).
         if: matrix.os != 'windows-latest'
         run: |
-          EXTRA_OPTS=""
-          if [ "${{ matrix.options.mtlx }}" = "True" ]; then
-            EXTRA_OPTS="-o materialx/*:shared=True"
-          fi
           # Same options/settings as the "conan create" step above, so this
           # resolves the package it already built instead of triggering a
           # second, redundant build under different options.
           ./external_plugin_demo/run.sh \
+            -o openusd/*:with_imaging="${{ matrix.options.imaging }}" \
             -o openusd/*:with_openimageio="${{ matrix.options.oiio }}" \
             -o openusd/*:with_materialx="${{ matrix.options.mtlx }}" \
-            -s compiler.cppstd="${{ matrix.options.cppstd }}" \
-            $EXTRA_OPTS
+            -s compiler.cppstd="${{ matrix.options.cppstd }}"

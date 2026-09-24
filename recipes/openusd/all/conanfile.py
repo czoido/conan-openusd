@@ -18,29 +18,41 @@ class OpenUSDConan(ConanFile):
     url = "https://github.com/conan-io/conan-center-index"
     homepage = "https://openusd.org/"
     topics = ("3d", "scene", "usd")
+    # Plug registry locates plugins relative to the shared libs
     package_type = "shared-library"
     settings = "os", "arch", "compiler", "build_type"
     options = {
+        "with_imaging": [True, False],
         "with_openimageio": [True, False],
         "with_materialx": [True, False],
     }
     default_options = {
+        "with_imaging": True,
         "with_openimageio": False,
-        "with_materialx": False
+        "with_materialx": False,
     }
     exports = "components/*.json"
 
     def export_sources(self):
         export_conandata_patches(self)
 
+    def configure(self):
+        if self.options.with_imaging:
+            self.options["opensubdiv"].with_opengl = True
+        else:
+            self.options.rm_safe("with_openimageio")
+        if self.options.with_materialx:
+            self.options["materialx"].shared = True
+
     def layout(self):
         cmake_layout(self, src_folder="src")
 
     def requirements(self):
         self.requires("onetbb/2023.1.0", transitive_headers=True)
-        self.requires("opensubdiv/3.7.0")
-        self.requires("opengl/system")
-        if self.options.with_openimageio:
+        if self.options.with_imaging:
+            self.requires("opensubdiv/3.7.0")
+            self.requires("opengl/system")
+        if self.options.get_safe("with_openimageio"):
             self.requires("openimageio/2.5.19.1")
         if self.options.with_materialx:
             self.requires("materialx/1.39.4")
@@ -50,7 +62,7 @@ class OpenUSDConan(ConanFile):
 
     def validate(self):
         check_min_cppstd(self, 17)
-        if not self.dependencies["opensubdiv"].options.with_opengl:
+        if self.options.with_imaging and not self.dependencies["opensubdiv"].options.with_opengl:
             raise ConanInvalidConfiguration('openusd requires -o "opensubdiv/*:with_opengl=True"')
         if self.options.with_materialx and not self.dependencies["materialx"].options.shared:
             raise ConanInvalidConfiguration('openusd requires -o "materialx/*:shared=True"')
@@ -67,18 +79,21 @@ class OpenUSDConan(ConanFile):
         tc.cache_variables["PXR_BUILD_TUTORIALS"] = False
         tc.cache_variables["PXR_BUILD_HTML_DOCUMENTATION"] = False
         tc.cache_variables["PXR_ENABLE_PYTHON_SUPPORT"] = False
-        tc.cache_variables["PXR_USE_DEBUG_PYTHON"] = False
         tc.cache_variables["PXR_BUILD_USD_TOOLS"] = False
-        tc.cache_variables["PXR_BUILD_OPENIMAGEIO_PLUGIN"] = self.options.with_openimageio
+        tc.cache_variables["PXR_BUILD_IMAGING"] = self.options.with_imaging
+        tc.cache_variables["PXR_BUILD_USD_IMAGING"] = self.options.with_imaging
+        tc.cache_variables["PXR_BUILD_OPENIMAGEIO_PLUGIN"] = bool(self.options.get_safe("with_openimageio"))
         tc.cache_variables["PXR_ENABLE_MATERIALX_SUPPORT"] = self.options.with_materialx
         tc.cache_variables["TBB_tbb_LIBRARY"] = "TBB::tbb"
-        tc.cache_variables["OIIO_LIBRARIES"] = "OpenImageIO::OpenImageIO" if self.options.with_openimageio else ""
+        if self.options.get_safe("with_openimageio"):
+            tc.cache_variables["OIIO_LIBRARIES"] = "OpenImageIO::OpenImageIO"
         tc.generate()
 
         deps = CMakeDeps(self)
-        subdiv_suffix = "" if self.dependencies["opensubdiv"].options.shared else "_static"
-        deps.set_property("opensubdiv::osdcpu", "cmake_target_name", f"OpenSubdiv::osdCPU{subdiv_suffix}")
-        deps.set_property("opensubdiv::osdgpu", "cmake_target_name", f"OpenSubdiv::osdGPU{subdiv_suffix}")
+        if self.options.with_imaging:
+            subdiv_suffix = "" if self.dependencies["opensubdiv"].options.shared else "_static"
+            deps.set_property("opensubdiv::osdcpu", "cmake_target_name", f"OpenSubdiv::osdCPU{subdiv_suffix}")
+            deps.set_property("opensubdiv::osdgpu", "cmake_target_name", f"OpenSubdiv::osdGPU{subdiv_suffix}")
 
         # Remove materialx namespace
         materialx_targets = [
@@ -122,17 +137,11 @@ class OpenUSDConan(ConanFile):
     def _condition_is_true(self, condition):
         symbols = {
             "is_apple": is_apple_os(self),
-            "with_openimageio": bool(self.options.with_openimageio),
+            "with_imaging": bool(self.options.with_imaging),
+            "with_openimageio": bool(self.options.get_safe("with_openimageio")),
             "with_materialx": bool(self.options.with_materialx),
         }
-        for name in condition:
-            negated = name.startswith("not_")
-            value = symbols[name[4:] if negated else name]
-            if negated:
-                value = not value
-            if not value:
-                return False
-        return True
+        return all(symbols[name] for name in condition)
 
     def package_info(self):
         is_apple = is_apple_os(self)
@@ -166,5 +175,6 @@ class OpenUSDConan(ConanFile):
                 component.libs = [f"usd_{comp_name}"]
                 if self.settings.os == "Windows":
                     component.bindirs = ["lib"]
-                if self.settings.os in ["Linux", "FreeBSD"]:
-                    component.system_libs = ["m", "pthread", "dl"]
+
+        if self.settings.os in ["Linux", "FreeBSD"]:
+            self.cpp_info.components["arch"].system_libs = ["m", "pthread", "dl"]
