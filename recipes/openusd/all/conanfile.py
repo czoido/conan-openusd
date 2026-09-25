@@ -45,13 +45,15 @@ class OpenUSDConan(ConanFile):
         if self.options.with_imaging:
             self.requires("opensubdiv/3.7.0")
             self.requires("opengl/system")
+            if self.settings.os == "Linux":
+                self.requires("xorg/system")
         if self.options.get_safe("with_openimageio"):
             self.requires("openimageio/2.5.19.1")
         if self.options.with_materialx:
             self.requires("materialx/1.39.4")
 
     def build_requirements(self):
-        self.tool_requires("cmake/[>=3.27 <4]")
+        self.tool_requires("cmake/[>=3.27]")
 
     def validate(self):
         check_min_cppstd(self, 17)
@@ -74,7 +76,6 @@ class OpenUSDConan(ConanFile):
         tc.cache_variables["PXR_BUILD_TESTS"] = False
         tc.cache_variables["PXR_BUILD_EXAMPLES"] = False
         tc.cache_variables["PXR_BUILD_TUTORIALS"] = False
-        tc.cache_variables["PXR_BUILD_HTML_DOCUMENTATION"] = False
         tc.cache_variables["PXR_ENABLE_PYTHON_SUPPORT"] = False
         tc.cache_variables["PXR_BUILD_USD_TOOLS"] = False
         tc.cache_variables["PXR_BUILD_IMAGING"] = self.options.with_imaging
@@ -91,19 +92,20 @@ class OpenUSDConan(ConanFile):
             deps.set_property("opensubdiv::osdcpu", "cmake_target_name", f"OpenSubdiv::osdCPU{subdiv_suffix}")
             deps.set_property("opensubdiv::osdgpu", "cmake_target_name", f"OpenSubdiv::osdGPU{subdiv_suffix}")
 
-        # Remove materialx namespace
-        materialx_targets = [
-            "MaterialXCore",
-            "MaterialXFormat",
-            "MaterialXGenGlsl",
-            "MaterialXGenOsl",
-            "MaterialXGenMsl",
-            "MaterialXGenShader",
-            "MaterialXRender",
-            "MaterialXRenderGlsl",
-        ]
-        for target in materialx_targets:
-            deps.set_property(f"materialx::{target}", "cmake_target_name", target)
+        if self.options.with_materialx:
+            # Remove materialx namespace
+            materialx_targets = [
+                "MaterialXCore",
+                "MaterialXFormat",
+                "MaterialXGenGlsl",
+                "MaterialXGenOsl",
+                "MaterialXGenMsl",
+                "MaterialXGenShader",
+                "MaterialXRender",
+                "MaterialXRenderGlsl",
+            ]
+            for target in materialx_targets:
+                deps.set_property(f"materialx::{target}", "cmake_target_name", target)
         deps.generate()
 
     def build(self):
@@ -173,3 +175,8 @@ class OpenUSDConan(ConanFile):
 
         if self.settings.os in ["Linux", "FreeBSD"]:
             self.cpp_info.components["arch"].system_libs = ["m", "pthread", "dl"]
+        elif self.settings.os == "Windows":
+            self.cpp_info.components["arch"].system_libs = ["ws2_32", "dbghelp"]
+
+        if self.options.with_imaging and self.settings.os == "Linux":
+            self.cpp_info.components["garch"].requires.append("xorg::x11")

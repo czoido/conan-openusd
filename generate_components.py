@@ -43,7 +43,6 @@ FIXED_VARS = {
     "PXR_BUILD_TESTS": False,
     "PXR_BUILD_EXAMPLES": False,
     "PXR_BUILD_TUTORIALS": False,
-    "PXR_BUILD_HTML_DOCUMENTATION": False,
     "PXR_ENABLE_PYTHON_SUPPORT": False,
     "PXR_BUILD_USD_TOOLS": False,
     # upstream defaults the recipe does not touch
@@ -90,6 +89,8 @@ EXTERNAL_TOKEN_MAP = {
     # upstream's Packages.cmake, not visible in any committed CMakeLists.txt
     # text) to Cocoa/UIKit + Foundation frameworks rather than a linkable
     # Conan target; this mapping is curated, not derivable from source.
+    # On Linux it also holds ${X11_LIBRARIES}: package_info() adds
+    # xorg::x11 to garch for that case, since this map is platform-agnostic.
     "${GARCH_PLATFORM_LIBRARIES}": {"requires": ["opengl::opengl"], "frameworks": ["Foundation", "$kit_framework"]},
     "${OIIO_LIBRARIES}": {"requires": ["openimageio::openimageio"]},
     "${__OIIO_IMATH_LIBS}": {},  # transitively covered by openimageio::openimageio
